@@ -12,3 +12,5 @@ def main():
             os.path.join(path, file, "output")
         )
         write_info(os.path.join(path, file, "output_metrics_features.json"), output)
+
+main()
