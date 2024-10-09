@@ -71,6 +71,8 @@ def extrai_frames(parent_path, video_folder, video_path, frames_number, info_pat
         info["delete_blurred"] = True
     if not info["colmap"] and not info["laplacians"]:
         laplacians = compute_laplacian(preprocess_images(os.path.join(parent_path, video_folder, 'images_orig')))
+        info["laplacians"] = True
+        info["lap_val"] = laplacians.tolist()
     elif not info["laplacians"]:
         laplacians = compute_laplacian(preprocess_images(os.path.join(parent_path, video_folder, 'images')))
         info["laplacians"] = True
@@ -456,7 +458,7 @@ def colmap_evaluation_main(colmap_output_path, images_path):
     num_images = get_num_images(images_path)
 
     # Get the quaternions and translation arrays from the sparse model with the most quantity of poses found
-    Qs, Ts, num_reg_images_max, _ = return_maximum_size_reconstruction(colmap_output_path, num_images)
+    Qs, Ts, num_reg_images_max, camera_model = return_maximum_size_reconstruction(colmap_output_path, num_images)
     
     # Get the camera positions and orientations
     camera_positions, normals, _, _ = return_camera_positions(Qs, Ts)
@@ -470,7 +472,7 @@ def colmap_evaluation_main(colmap_output_path, images_path):
     percentage_angle_views = plot_number_views(thetas, phis, centered=False, plot=False)
     percentage_angle_views_center = plot_number_views(thetas_center, phis_center, centered=True, plot=False)
 
-    return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images
+    return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images, camera_model
 
 def colmap_evaluation_pilot(pilot_path, images_path):
     normals_inside_vec = []
@@ -478,12 +480,13 @@ def colmap_evaluation_pilot(pilot_path, images_path):
     percentage_angle_views_vec = []
     percentage_angle_views_center_vec = []
     percentage_poses_found_vec = []
+    camera_model_vec = []
 
     # Get number of images extracted of the video
     num_images = get_num_images(images_path)
     for folder in os.listdir(pilot_path):
         # Get the quaternions and translation arrays from the sparse model with the most quantity of poses found
-        Qs, Ts, num_reg_images_max, _ = return_maximum_size_reconstruction(os.path.join(pilot_path, folder), num_images)
+        Qs, Ts, num_reg_images_max, camera_model = return_maximum_size_reconstruction(os.path.join(pilot_path, folder), num_images)
         
         # Get the camera positions and orientations
         camera_positions, normals, _, _ = return_camera_positions(Qs, Ts)
@@ -502,6 +505,7 @@ def colmap_evaluation_pilot(pilot_path, images_path):
         percentage_angle_views_vec.append(percentage_angle_views)
         percentage_angle_views_center_vec.append(percentage_angle_views_center)
         percentage_poses_found_vec.append(num_reg_images_max / num_images)
+        camera_model_vec.append(camera_model)
 
     return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images
 
