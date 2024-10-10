@@ -198,7 +198,7 @@ def get_gpu_usage():
             check=True
         )
         gpu_usage = result.stdout.strip()
-        return gpu_usage
+        return int(gpu_usage)
     except subprocess.CalledProcessError as e:
         print(f"Error querying GPU usage: {e}")
         return None
@@ -221,7 +221,18 @@ def get_ram_usage():
     except subprocess.CalledProcessError as e:
         print(f"Error querying RAM usage: {e}")
         return None
-    
+
+def escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path):
+    num_images = get_num_images(os.path.join(frames_parent_path, "images_orig"))
+    _, _, _, camera_model = return_maximum_size_reconstruction(colmap_output_path, num_images)
+    if camera_model != 0:
+        path = os.path.join(colmap_output_path, "colmap", "sparse", f"{camera_model}")
+        path_0 = os.path.join(colmap_output_path, "colmap", "sparse", "0")
+        path_1 = os.path.join(colmap_output_path, "colmap", "sparse", "_1")
+        os.system(f"mv {path_0} {path_1}")
+        os.system(f"mv {path} {path_0}")
+        os.system(f"mv {path_1} {path}")
+
 def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path):
     info = read_info(info_path)
     if not info["colmap"]:
@@ -262,6 +273,9 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
         end = time()
         sleep(1.0)
         tempo = end - start
+
+        escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path)
+        
         os.system('rm -rf ' + os.path.join(frames_parent_path, 'images_orig'))
         info["colmap"] = True
         info["gpu_colmap"] = gpu
@@ -507,7 +521,7 @@ def colmap_evaluation_pilot(pilot_path, images_path):
         percentage_poses_found_vec.append(num_reg_images_max / num_images)
         camera_model_vec.append(camera_model)
 
-    return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images
+    return normals_inside_vec, normals_inside_center_vec, percentage_angle_views_vec, percentage_angle_views_center_vec, percentage_poses_found_vec, camera_model_vec
 
 def init(parent_path, video_folder):
     if not os.path.exists(os.path.join(parent_path, video_folder, "info.json")):
@@ -552,8 +566,8 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto', info_path)
     os.system("conda deactivate")
     sleep(1.0)
-    normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found = colmap_evaluation_main(colmap_output_path, images_path_8)
-    normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
+    normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, camera_model = colmap_evaluation_main(colmap_output_path, images_path_8)
+    normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
 
     output = {
         "lap_mean": np.mean(laplacians), 
@@ -579,11 +593,13 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
         "percentage_angle_views": percentage_angle_views, 
         "percentage_angle_views_center": percentage_angle_views_center, 
         "percentage_poses_found": percentage_poses_found,
+        "camera_model": camera_model,
 
         "percentage_normals_inside_pilot": normals_inside_pilot,
         "percentage_normals_inside_center_pilot": normals_inside_center_pilot, 
         "percentage_angle_views_pilot": percentage_angle_views_pilot, 
         "percentage_angle_views_center_pilot": percentage_angle_views_center_pilot, 
-        "percentage_poses_found_pilot": percentage_poses_found_pilot
+        "percentage_poses_found_pilot": percentage_poses_found_pilot,
+        "camera_models_pilot": camera_models_pilot
     }
     return output
