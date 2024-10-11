@@ -232,6 +232,7 @@ def escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path):
         os.system(f"mv {path_0} {path_1}")
         os.system(f"mv {path} {path_0}")
         os.system(f"mv {path_1} {path}")
+        os.system(f"ns-process-data images --data {os.path.join(colmap_output_path, "images_orig")} --output-dir {colmap_output_path} --matching-method exhaustive --skip-colmap --skip-image-processing")
 
 def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path):
     info = read_info(info_path)
@@ -275,7 +276,7 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
         tempo = end - start
 
         escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path)
-        
+
         os.system('rm -rf ' + os.path.join(frames_parent_path, 'images_orig'))
         info["colmap"] = True
         info["gpu_colmap"] = gpu
