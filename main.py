@@ -1,12 +1,12 @@
 from auditor_utils import *
 
 def main():
-    path = "/home/tafnes/Downloads/videos"
+    path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1"
     for file in os.listdir(path):
         output = pipeline(
             path,
             file,
-            file + ".MOV",
+            file + ".mp4",
             "pilot",
             os.path.join(path, file),
             os.path.join(path, file, "output")

@@ -232,7 +232,7 @@ def escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path):
         os.system(f"mv {path_0} {path_1}")
         os.system(f"mv {path} {path_0}")
         os.system(f"mv {path_1} {path}")
-        os.system(f"ns-process-data images --data {os.path.join(colmap_output_path, "images_orig")} --output-dir {colmap_output_path} --matching-method exhaustive --skip-colmap --skip-image-processing")
+        os.system(f"ns-process-data images --data {os.path.join(colmap_output_path, 'images_orig')} --output-dir {colmap_output_path} --matching-method exhaustive --skip-colmap --skip-image-processing")
 
 def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path):
     info = read_info(info_path)
@@ -248,7 +248,8 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
                 "ns-process-data", "images", 
                 "--data", os.path.join(frames_parent_path, "images_orig"), 
                 "--output-dir", colmap_output_path, 
-                "--matching-method", "exhaustive"
+                "--matching-method", "exhaustive",
+                # "--num-downscales", "0"
             ]
             process = subprocess.Popen(cmd)
             # Monitor GPU usage while the command is running
@@ -298,13 +299,15 @@ def nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path)
         ram = []
         start = time()
         cmd = [
-            "ns-train", "splatfacto", 
+            "ns-train", "splatfacto-big", 
             "--data", colmap_output_path, 
             "--max-num-iterations", "100000", 
             "--viewer.quit-on-train-completion", "True",
             "--steps-per-save", "10000", 
             "--save-only-latest-checkpoint", "False",
-            "--output-dir", splatfacto_output_path
+            "--output-dir", splatfacto_output_path,
+            # "--pipeline.model.num-downscales", "0",
+            # "nerfstudio-data", "--downscale-factor", "1"
         ]
         process = subprocess.Popen(cmd)
         # Monitor GPU usage while the command is running
@@ -470,7 +473,16 @@ def return_camera_positions(Qs, Ts, centered=False):
 
 def colmap_evaluation_main(colmap_output_path, images_path):
     # Get number of images extracted of the video
-    num_images = get_num_images(images_path)
+    try:
+        num_images = get_num_images(images_path[0])
+    except FileNotFoundError:
+        try:
+            num_images = get_num_images(images_path[1])
+        except FileNotFoundError:
+            try:
+                num_images = get_num_images(images_path[2])
+            except FileNotFoundError:
+                num_images = get_num_images(images_path[3])
 
     # Get the quaternions and translation arrays from the sparse model with the most quantity of poses found
     Qs, Ts, num_reg_images_max, camera_model = return_maximum_size_reconstruction(colmap_output_path, num_images)
@@ -498,7 +510,16 @@ def colmap_evaluation_pilot(pilot_path, images_path):
     camera_model_vec = []
 
     # Get number of images extracted of the video
-    num_images = get_num_images(images_path)
+    try:
+        num_images = get_num_images(images_path[0])
+    except FileNotFoundError:
+        try:
+            num_images = get_num_images(images_path[1])
+        except FileNotFoundError:
+            try:
+                num_images = get_num_images(images_path[2])
+            except FileNotFoundError:
+                num_images = get_num_images(images_path[3])
     for folder in os.listdir(pilot_path):
         # Get the quaternions and translation arrays from the sparse model with the most quantity of poses found
         Qs, Ts, num_reg_images_max, camera_model = return_maximum_size_reconstruction(os.path.join(pilot_path, folder), num_images)
@@ -555,7 +576,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     colmap_limit = 3
     frames_parent_path = os.path.join(parent_path, video_folder)
     images_path = os.path.join(frames_parent_path, 'images_orig')
-    images_path_8 = os.path.join(frames_parent_path, 'images_8')
+    images_path_8 = [os.path.join(frames_parent_path, 'images_8'), os.path.join(frames_parent_path, 'images_4'), os.path.join(frames_parent_path, 'images_2'), os.path.join(frames_parent_path, 'images')]
 
     info_path = init(parent_path, video_folder)
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
