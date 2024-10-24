@@ -6,7 +6,7 @@ def cria_pastas(path):
             os.system(f"mkdir {os.path.join(path, files)[:os.path.join(path, files).rfind('.')]}")
             os.system(f"mv {os.path.join(path, files)} {os.path.join(path, files)[:os.path.join(path, files).rfind('.')]}")
 
-def main(path):
+def main(path, model):
     for file in os.listdir(path):
         try:
             output = pipeline(
@@ -16,7 +16,7 @@ def main(path):
                 "pilot",
                 os.path.join(path, file),
                 os.path.join(path, file, "output"),
-                'splatfacto-w'
+                model
             )
         except:
             output = pipeline(
@@ -26,10 +26,14 @@ def main(path):
                 "pilot",
                 os.path.join(path, file),
                 os.path.join(path, file, "output"),
-                'splatfacto-w'
+                model
             )
         write_info(os.path.join(path, file, "output_metrics_features.json"), output)
 
-path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_2_W"
+path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1_W"
 # cria_pastas(path)
-main(path)
+main(path, 'splatfacto-w')
+
+path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1_W_big"
+# cria_pastas(path)
+main(path, 'splatfacto-w-big')
