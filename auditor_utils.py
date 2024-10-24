@@ -12,6 +12,7 @@ from time import time, sleep
 import subprocess
 import pandas as pd
 import io
+import csv
 
 def print_progress_bar(iteration, total, bar_length=50):
     progress = (iteration / total)
@@ -133,9 +134,12 @@ def read_images_binary(path_to_model_file, num_images):
         num_reg_images = read_next_bytes(fid, 8, "Q")[0]
         Qs = [None] * num_images
         Ts = [None] * num_images
+        image_names = []
+        image_ids = []
         for _ in range(num_reg_images):
             binary_image_properties = read_next_bytes(fid, num_bytes=64, format_char_sequence="idddddddi")
             image_id = binary_image_properties[0]
+            image_ids.append(image_id)
             qvec = np.array(binary_image_properties[1:5])
             tvec = np.array(binary_image_properties[5:8])
             camera_id = binary_image_properties[8]
@@ -145,19 +149,20 @@ def read_images_binary(path_to_model_file, num_images):
                 image_name += current_char
                 current_char = read_next_bytes(fid, 1, "c")[0]
             image_name = image_name.decode("utf-8")
+            image_names.append(image_name)
             num_points2D = read_next_bytes(fid, num_bytes=8, format_char_sequence="Q")[0]
             x_y_id_s = read_next_bytes(fid, num_bytes=24 * num_points2D, format_char_sequence="ddq" * num_points2D)
             Qs[image_id - 1] = qvec
             Ts[image_id - 1] = tvec
     
-    return Qs, Ts, num_reg_images
+    return Qs, Ts, num_reg_images, image_names, image_ids
 
 def return_maximum_size_reconstruction(colmap_output_path, num_images):
     num_reg_images_max = 0
     folder_max = None
     for folder in os.listdir(os.path.join(colmap_output_path, "colmap", "sparse")):
         if folder.isdigit():
-            Q, T, num_reg_images = read_images_binary(os.path.join(colmap_output_path, "colmap", "sparse", folder, "images.bin"), num_images)
+            Q, T, num_reg_images, _, _ = read_images_binary(os.path.join(colmap_output_path, "colmap", "sparse", folder, "images.bin"), num_images)
             if num_reg_images > num_reg_images_max:
                 num_reg_images_max = num_reg_images
                 Qs = Q
@@ -233,6 +238,7 @@ def escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path):
         os.system(f"mv {path} {path_0}")
         os.system(f"mv {path_1} {path}")
         os.system(f"ns-process-data images --data {os.path.join(colmap_output_path, 'images_orig')} --output-dir {colmap_output_path} --matching-method exhaustive --skip-colmap --skip-image-processing")
+    return camera_model
 
 def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path):
     info = read_info(info_path)
@@ -276,7 +282,7 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
         sleep(1.0)
         tempo = end - start
 
-        escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path)
+        camera_model = escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path)
 
         os.system('rm -rf ' + os.path.join(frames_parent_path, 'images_orig'))
         info["colmap"] = True
@@ -290,24 +296,164 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
         tempo = info["tempo_colmap"]
         number_iterations = info["colmap_tries"]
     write_info(info_path, info)
-    return tempo, gpu, ram, number_iterations
+    return tempo, gpu, ram, number_iterations, camera_model
 
-def nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path):
+def nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, info_path):
+    info = read_info(info_path)
+    if not info["colmap"]:
+        number_iterations = 0
+        is_wrong_flag = True
+        gpu = []
+        ram = []
+        start = time()
+        while is_wrong_flag and number_iterations < colmap_limit:
+            delete_colmap_dirs(colmap_output_path)
+            cmd = [
+                "bash", "commands.sh", frames_parent_path
+            ]
+            process = subprocess.Popen(cmd)
+            # Monitor GPU usage while the command is running
+            try:
+                while process.poll() is None:  # Check if process is still running
+                    gpu_usage = get_gpu_usage()
+                    ram_usage = get_ram_usage()
+                    if gpu_usage:
+                        gpu.append(gpu_usage)
+                    if ram_usage:
+                        ram.append(ram_usage)
+                    sleep(1)  # Adjust the interval as needed
+            finally:
+                process.wait()  # Ensure the process completes
+                gpu_usage = get_gpu_usage()
+                ram_usage = get_ram_usage()
+                if gpu_usage:
+                    gpu.append(gpu_usage)
+                if ram_usage:
+                    ram.append(ram_usage)
+            is_wrong_flag = is_wrong(colmap_output_path, os.path.join(frames_parent_path, "images_orig"))
+            number_iterations += 1
+
+        camera_model = escolhe_maior_modelo_de_camera(colmap_output_path, frames_parent_path)
+
+        num_images = get_num_images(os.path.join(frames_parent_path, "images_orig"))
+        os.system('rm -rf ' + os.path.join(frames_parent_path, 'images_orig'))
+
+        os.system(f'colmap bundle_adjuster --input_path {os.path.join(frames_parent_path, "colmap/sparse/0")} --output_path {os.path.join(frames_parent_path, "colmap/sparse/0")}')
+        os.system(f'colmap image_undistorter --image_path {os.path.join(frames_parent_path, "colmap/images")} --input_path {os.path.join(frames_parent_path, "colmap/sparse/0")} --output_path {os.path.join(frames_parent_path, "colmap/dense")} --output_type COLMAP --max_image_size 2000')
+
+        create_tsv_file(os.path.join(frames_parent_path, "colmap"), frames_parent_path[frames_parent_path.rfind('/')+1:], num_images)
+
+        end = time()
+        sleep(1.0)
+        tempo = end - start
+
+        info["colmap"] = True
+        info["gpu_colmap"] = gpu
+        info["ram_colmap"] = ram
+        info["tempo_colmap"] = tempo
+        info["colmap_tries"] = number_iterations
+        info["camera_model"] = camera_model
+    else:
+        gpu = info["gpu_colmap"]
+        ram = info["ram_colmap"]
+        tempo = info["tempo_colmap"]
+        number_iterations = info["colmap_tries"]
+        camera_model = 0
+    write_info(info_path, info)
+    return tempo, gpu, ram, number_iterations, camera_model
+
+def create_tsv_file(path, dataset, num_images):
+    _, _, _, image_names, image_ids = read_images_binary(os.path.join(path,'dense','sparse','images.bin'), num_images)
+    with open(os.path.join(path, 'brandenburg') + '.tsv', 'w') as file:
+        tsv_writer = csv.writer(file, delimiter='\t')
+
+        tsv_writer.writerow(['filename', 'id', 'split', 'dataset'])
+        k = 0
+        for image, id in zip(image_names, image_ids):
+            if k % 10 == 0:
+                tsv_writer.writerow([image, id, 'test', dataset])
+            else:
+                tsv_writer.writerow([image, id, 'train', dataset])
+            k += 1
+        file.close()
+
+def nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model, downscale=0):
     info = read_info(info_path)
     if not info["splatfacto"]:
         gpu = []
         ram = []
         start = time()
+        if downscale == 0:
+            cmd = [
+                "ns-train", model, 
+                "--data", colmap_output_path, 
+                "--max-num-iterations", "100000", 
+                "--viewer.quit-on-train-completion", "True",
+                "--steps-per-save", "10000", 
+                "--save-only-latest-checkpoint", "False",
+                "--output-dir", splatfacto_output_path
+            ]
+        else:
+            cmd = [
+                "ns-train", model, 
+                "--data", colmap_output_path, 
+                "--max-num-iterations", "100000", 
+                "--viewer.quit-on-train-completion", "True",
+                "--steps-per-save", "10000", 
+                "--save-only-latest-checkpoint", "False",
+                "--output-dir", splatfacto_output_path,
+                "nerfstudio-data", "--downscale-factor", str(downscale)
+            ]
+        process = subprocess.Popen(cmd)
+        # Monitor GPU usage while the command is running
+        try:
+            while process.poll() is None:  # Check if process is still running
+                gpu_usage = get_gpu_usage()
+                ram_usage = get_ram_usage()
+                if gpu_usage:
+                    gpu.append(gpu_usage)
+                if ram_usage:
+                    ram.append(ram_usage)
+                sleep(1)  # Adjust the interval as needed
+        finally:
+            process.wait()  # Ensure the process completes
+            gpu_usage = get_gpu_usage()
+            ram_usage = get_ram_usage()
+            if gpu_usage:
+                gpu.append(gpu_usage)
+            if ram_usage:
+                ram.append(ram_usage)
+        end = time()
+        sleep(1.0)
+        tempo = end - start
+        info["splatfacto"] = True
+        info["gpu_train"] = gpu
+        info["ram_train"] = ram
+        info["tempo_train"] = tempo
+    else:
+        gpu = info["gpu_train"]
+        ram = info["ram_train"]
+        tempo = info["tempo_train"]
+    write_info(info_path, info)
+    return tempo, gpu, ram
+
+def nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_path, model):
+    info = read_info(info_path)
+    if not info["splatfacto"]:
+        gpu = []
+        ram = []
+        start = time()
+        
         cmd = [
-            "ns-train", "splatfacto-big", 
-            "--data", colmap_output_path, 
+            "ns-train", model, 
+            "--data", os.path.join(colmap_output_path, "colmap"), 
             "--max-num-iterations", "100000", 
             "--viewer.quit-on-train-completion", "True",
             "--steps-per-save", "10000", 
             "--save-only-latest-checkpoint", "False",
             "--output-dir", splatfacto_output_path,
-            # "--pipeline.model.num-downscales", "0",
-            # "nerfstudio-data", "--downscale-factor", "1"
+            "nerf-w-data-parser-config", "--data", os.path.join(colmap_output_path, "colmap"),
+            "--data-name", "brandenburg"
         ]
         process = subprocess.Popen(cmd)
         # Monitor GPU usage while the command is running
@@ -359,6 +505,39 @@ def nerfstudio_evaluations(model_output_path, video_folder, destino_path, model,
             sleep(1)
             os.system('mkdir ' + destino_path)
             os.system('ns-eval --load-config ' + os.path.join(model_output_path, video_folder, model, '*', 'config.yml') + ' --output-path ' + os.path.join(destino_path, f'eval_ckpt{elem}.json'))
+            with open(os.path.join(destino_path, f'eval_ckpt{elem}.json')) as file:
+                content = json.load(file)
+                psnr.append(content['results']['psnr'])
+                ssim.append(content['results']['ssim'])
+                lpips.append(content['results']['lpips'])
+        info["evaluations"] = True
+        info["psnr"] = psnr
+        info["ssim"] = ssim
+        info["lpips"] = lpips
+    else:
+        psnr = info["psnr"]
+        ssim = info["ssim"]
+        lpips = info["lpips"]
+    write_info(info_path, info)
+    return psnr, ssim, lpips
+
+def nerfstudio_evaluations_w(model_output_path, destino_path, model, info_path):
+    info = read_info(info_path)
+    if not info["evaluations"]:
+        elems = [*range(5000, 55000, 5000)]
+        elems.append(54999)
+        psnr = []
+        ssim = []
+        lpips = []
+        for elem in elems:
+            os.system('mv ' + os.path.join(model_output_path, 'colmap', model, '*', 'nerfstudio_models', f'step-{elem:09}.ckpt') + ' ' + os.path.join(model_output_path, 'colmap', model, '*'))
+            sleep(1)
+        
+        for elem in elems:
+            os.system('mv ' + os.path.join(model_output_path, 'colmap', model, '*', f'step-{elem:09}.ckpt') + ' ' + os.path.join(model_output_path, 'colmap', model, '*', 'nerfstudio_models'))
+            sleep(1)
+            os.system('mkdir ' + destino_path)
+            os.system('ns-eval --load-config ' + os.path.join(model_output_path, 'colmap', model, '*', 'config.yml') + ' --output-path ' + os.path.join(destino_path, f'eval_ckpt{elem}.json'))
             with open(os.path.join(destino_path, f'eval_ckpt{elem}.json')) as file:
                 content = json.load(file)
                 psnr.append(content['results']['psnr'])
@@ -501,6 +680,36 @@ def colmap_evaluation_main(colmap_output_path, images_path):
 
     return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images, camera_model
 
+def colmap_evaluation_main_w(colmap_output_path, images_path):
+    # Get number of images extracted of the video
+    try:
+        num_images = get_num_images(images_path[0])
+    except FileNotFoundError:
+        try:
+            num_images = get_num_images(images_path[1])
+        except FileNotFoundError:
+            try:
+                num_images = get_num_images(images_path[2])
+            except FileNotFoundError:
+                num_images = get_num_images(images_path[3])
+
+    # Get the quaternions and translation arrays from the sparse model with the most quantity of poses found
+    Qs, Ts, num_reg_images_max, camera_model = return_maximum_size_reconstruction(colmap_output_path, num_images)
+    
+    # Get the camera positions and orientations
+    camera_positions, normals, _, _ = return_camera_positions(Qs, Ts)
+    camera_positions_center, normals_center, _, _ = return_camera_positions(Qs, Ts, True)
+
+    # Compute metrics for the trajectory
+    normals_inside, thetas, phis = compute_metrics(camera_positions, normals)
+    normals_inside_center, thetas_center, phis_center = compute_metrics(camera_positions_center, normals_center)
+
+    # Plot number of views
+    percentage_angle_views = plot_number_views(thetas, phis, centered=False, plot=False)
+    percentage_angle_views_center = plot_number_views(thetas_center, phis_center, centered=True, plot=False)
+
+    return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images, camera_model
+
 def colmap_evaluation_pilot(pilot_path, images_path):
     normals_inside_vec = []
     normals_inside_center_vec = []
@@ -570,26 +779,33 @@ def write_info(info_path, info):
         file.write(json_object)
         file.close()
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path):
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, model):
     repetition_number = 10
     frames_number = 300
     colmap_limit = 3
     frames_parent_path = os.path.join(parent_path, video_folder)
     images_path = os.path.join(frames_parent_path, 'images_orig')
-    images_path_8 = [os.path.join(frames_parent_path, 'images_8'), os.path.join(frames_parent_path, 'images_4'), os.path.join(frames_parent_path, 'images_2'), os.path.join(frames_parent_path, 'images')]
+    images_path_8 = [
+        os.path.join(frames_parent_path, 'images_8'), 
+        os.path.join(frames_parent_path, 'images_4'), 
+        os.path.join(frames_parent_path, 'images_2'), 
+        os.path.join(frames_parent_path, 'images')
+    ]
 
     info_path = init(parent_path, video_folder)
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
-    os.system("conda activate nerfstudio")
-    sleep(1.0)
-    pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
-    tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
-    tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path)
-    psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto', info_path)
-    os.system("conda deactivate")
-    sleep(1.0)
-    normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, camera_model = colmap_evaluation_main(colmap_output_path, images_path_8)
-    normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
+    if model == 'splatfacto' or model == 'splatfacto-big':
+        # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
+        tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+        tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model)
+        psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto', info_path)
+        normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main(colmap_output_path, images_path_8)
+        # normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
+    elif model == 'splatfacto-w':
+        tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+        tempo_train, gpu_train, ram_train = nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_path, model)
+        psnr, ssim, lpips = nerfstudio_evaluations_w(splatfacto_output_path, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w', info_path)
+        normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main_w(colmap_output_path, [os.path.join(frames_parent_path, 'colmap/images')])
 
     output = {
         "lap_mean": np.mean(laplacians), 
@@ -617,11 +833,11 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
         "percentage_poses_found": percentage_poses_found,
         "camera_model": camera_model,
 
-        "percentage_normals_inside_pilot": normals_inside_pilot,
-        "percentage_normals_inside_center_pilot": normals_inside_center_pilot, 
-        "percentage_angle_views_pilot": percentage_angle_views_pilot, 
-        "percentage_angle_views_center_pilot": percentage_angle_views_center_pilot, 
-        "percentage_poses_found_pilot": percentage_poses_found_pilot,
-        "camera_models_pilot": camera_models_pilot
+        # "percentage_normals_inside_pilot": normals_inside_pilot,
+        # "percentage_normals_inside_center_pilot": normals_inside_center_pilot, 
+        # "percentage_angle_views_pilot": percentage_angle_views_pilot, 
+        # "percentage_angle_views_center_pilot": percentage_angle_views_center_pilot, 
+        # "percentage_poses_found_pilot": percentage_poses_found_pilot,
+        # "camera_models_pilot": camera_models_pilot
     }
     return output
