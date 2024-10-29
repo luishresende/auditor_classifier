@@ -189,7 +189,9 @@ def get_gpu_usage():
             text=True,
             check=True
         )
-        gpu_usage, gpu_percentage = result.stdout.strip()
+        res = result.stdout.strip()
+        gpu_usage = res[:res.find(',')]
+        gpu_percentage = res[res.find(',')+1:]
         return int(gpu_usage), int(gpu_percentage)
     except subprocess.CalledProcessError as e:
         print(f"Error querying GPU usage: {e}")
@@ -341,15 +343,15 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
         sleep(1.0)
         tempo = end - start
         info[model]["trained"] = True
-        info[f"gpu_{model}_vram"] = gpu_vram
-        info[f"gpu_{model}_perc"] = gpu_perc
-        info[f"ram_{model}"] = ram
-        info[f"tempo_{model}"] = tempo
+        info[model][f"gpu_train_vram"] = gpu_vram
+        info[model][f"gpu_train_perc"] = gpu_perc
+        info[model][f"ram_train"] = ram
+        info[model][f"tempo_train"] = tempo
     else:
-        gpu_vram = info[f"gpu_{model}_vram"]
-        gpu_perc = info[f"gpu_{model}_perc"]
-        ram = info[f"ram_{model}"]
-        tempo = info[f"tempo_{model}"]
+        gpu_vram = info[model][f"gpu_train_vram"]
+        gpu_perc = info[model][f"gpu_train_perc"]
+        ram = info[model][f"ram_train"]
+        tempo = info[model][f"tempo_train"]
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram
 

@@ -53,3 +53,4 @@ if args.initialize:
     cria_pastas(args.videos_dir)
 else:
     main(args.videos_dir, models)
+# main("/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_4", models)
