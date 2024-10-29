@@ -197,16 +197,16 @@ def delete_colmap_dirs(colmap_output_path):
 def get_gpu_usage():
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", "--query-gpu=memory.used,utilization.gpu", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             check=True
         )
-        gpu_usage = result.stdout.strip()
-        return int(gpu_usage)
+        gpu_usage, gpu_percentage = result.stdout.strip()
+        return int(gpu_usage), int(gpu_percentage)
     except subprocess.CalledProcessError as e:
         print(f"Error querying GPU usage: {e}")
-        return None
+        return None, None
     
 # Function to get GPU usage
 def get_ram_usage():
@@ -245,7 +245,8 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
     if not info["colmap"]:
         number_iterations = 0
         is_wrong_flag = True
-        gpu = []
+        gpu_vram = []
+        gpu_perc = []
         ram = []
         start = time()
         while is_wrong_flag and number_iterations < colmap_limit:
@@ -254,26 +255,27 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
                 "ns-process-data", "images", 
                 "--data", os.path.join(frames_parent_path, "images_orig"), 
                 "--output-dir", colmap_output_path, 
-                "--matching-method", "exhaustive",
-                # "--num-downscales", "0"
+                "--matching-method", "exhaustive"
             ]
             process = subprocess.Popen(cmd)
             # Monitor GPU usage while the command is running
             try:
                 while process.poll() is None:  # Check if process is still running
-                    gpu_usage = get_gpu_usage()
+                    gpu_usage, gpu_percentage = get_gpu_usage()
                     ram_usage = get_ram_usage()
                     if gpu_usage:
-                        gpu.append(gpu_usage)
+                        gpu_vram.append(gpu_usage)
+                        gpu_perc.append(gpu_percentage)
                     if ram_usage:
                         ram.append(ram_usage)
                     sleep(1)  # Adjust the interval as needed
             finally:
                 process.wait()  # Ensure the process completes
-                gpu_usage = get_gpu_usage()
+                gpu_usage, gpu_percentage = get_gpu_usage()
                 ram_usage = get_ram_usage()
                 if gpu_usage:
-                    gpu.append(gpu_usage)
+                    gpu_vram.append(gpu_usage)
+                    gpu_perc.append(gpu_percentage)
                 if ram_usage:
                     ram.append(ram_usage)
             is_wrong_flag = is_wrong(colmap_output_path, os.path.join(frames_parent_path, "images_orig"))
@@ -286,26 +288,29 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
 
         os.system('rm -rf ' + os.path.join(frames_parent_path, 'images_orig'))
         info["colmap"] = True
-        info["gpu_colmap"] = gpu
+        info["gpu_colmap_vram"] = gpu_vram
+        info["gpu_colmap_perc"] = gpu_perc
         info["ram_colmap"] = ram
         info["tempo_colmap"] = tempo
         info["colmap_tries"] = number_iterations
         info["camera_model"] = camera_model
     else:
-        gpu = info["gpu_colmap"]
+        gpu_vram = info["gpu_colmap_vram"]
+        gpu_perc = info["gpu_colmap_perc"]
         ram = info["ram_colmap"]
         tempo = info["tempo_colmap"]
         number_iterations = info["colmap_tries"]
         camera_model = info["camera_model"]
     write_info(info_path, info)
-    return tempo, gpu, ram, number_iterations, camera_model
+    return tempo, gpu_vram, gpu_perc, ram, number_iterations, camera_model
 
 def nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, info_path):
     info = read_info(info_path)
     if not info["colmap"]:
         number_iterations = 0
         is_wrong_flag = True
-        gpu = []
+        gpu_vram = []
+        gpu_perc = []
         ram = []
         start = time()
         while is_wrong_flag and number_iterations < colmap_limit:
@@ -317,19 +322,21 @@ def nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, in
             # Monitor GPU usage while the command is running
             try:
                 while process.poll() is None:  # Check if process is still running
-                    gpu_usage = get_gpu_usage()
+                    gpu_usage, gpu_percentage = get_gpu_usage()
                     ram_usage = get_ram_usage()
                     if gpu_usage:
-                        gpu.append(gpu_usage)
+                        gpu_vram.append(gpu_usage)
+                        gpu_perc.append(gpu_percentage)
                     if ram_usage:
                         ram.append(ram_usage)
                     sleep(1)  # Adjust the interval as needed
             finally:
                 process.wait()  # Ensure the process completes
-                gpu_usage = get_gpu_usage()
+                gpu_usage, gpu_percentage = get_gpu_usage()
                 ram_usage = get_ram_usage()
                 if gpu_usage:
-                    gpu.append(gpu_usage)
+                    gpu_vram.append(gpu_usage)
+                    gpu_perc.append(gpu_percentage)
                 if ram_usage:
                     ram.append(ram_usage)
             is_wrong_flag = is_wrong(colmap_output_path, os.path.join(frames_parent_path, "images_orig"))
@@ -382,7 +389,8 @@ def create_tsv_file(path, dataset, num_images):
 def nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model, downscale=0):
     info = read_info(info_path)
     if not info["splatfacto"]:
-        gpu = []
+        gpu_vram = []
+        gpu_perc = []
         ram = []
         start = time()
         if downscale == 0:
@@ -410,34 +418,38 @@ def nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path,
         # Monitor GPU usage while the command is running
         try:
             while process.poll() is None:  # Check if process is still running
-                gpu_usage = get_gpu_usage()
+                gpu_usage, gpu_percentage = get_gpu_usage()
                 ram_usage = get_ram_usage()
                 if gpu_usage:
-                    gpu.append(gpu_usage)
+                    gpu_vram.append(gpu_usage)
+                    gpu_perc.append(gpu_percentage)
                 if ram_usage:
                     ram.append(ram_usage)
                 sleep(1)  # Adjust the interval as needed
         finally:
             process.wait()  # Ensure the process completes
-            gpu_usage = get_gpu_usage()
+            gpu_usage, gpu_percentage = get_gpu_usage()
             ram_usage = get_ram_usage()
             if gpu_usage:
-                gpu.append(gpu_usage)
+                gpu_vram.append(gpu_usage)
+                gpu_perc.append(gpu_percentage)
             if ram_usage:
                 ram.append(ram_usage)
         end = time()
         sleep(1.0)
         tempo = end - start
         info["splatfacto"] = True
-        info["gpu_train"] = gpu
+        info["gpu_train_vram"] = gpu_vram
+        info["gpu_train_perc"] = gpu_perc
         info["ram_train"] = ram
         info["tempo_train"] = tempo
     else:
-        gpu = info["gpu_train"]
+        gpu_vram = info["gpu_train_vram"]
+        gpu_perc = info["gpu_train_perc"]
         ram = info["ram_train"]
         tempo = info["tempo_train"]
     write_info(info_path, info)
-    return tempo, gpu, ram
+    return tempo, gpu_vram, gpu_perc, ram
 
 def nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_path, model):
     info = read_info(info_path)
@@ -810,21 +822,27 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
         os.path.join(frames_parent_path, 'images_2'), 
         os.path.join(frames_parent_path, 'images')
     ]
-
+    
     info_path = init(parent_path, video_folder)
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
-    if model == 'splatfacto' or model == 'splatfacto-big' or model == 'splatfacto-w-light':
-        # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
-        tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
-        tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model)
-        psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
-        normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main(colmap_output_path, images_path_8)
-        # normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
-    elif model == 'splatfacto-w' or model == 'splatfacto-w-big':
-        tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, info_path)
-        tempo_train, gpu_train, ram_train = nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_path, model)
-        psnr, ssim, lpips = nerfstudio_evaluations_w(splatfacto_output_path, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w', info_path)
-        normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main_w(colmap_output_path, [os.path.join(frames_parent_path, 'colmap/images')])
+    pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
+    tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+    tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model)
+    psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
+    normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main(colmap_output_path, images_path_8)
+    normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
+    # if model == 'splatfacto' or model == 'splatfacto-big' or model == 'splatfacto-w-light':
+    #     # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
+    #     tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+    #     tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model)
+    #     psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
+    #     normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main(colmap_output_path, images_path_8)
+    #     # normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
+    # elif model == 'splatfacto-w' or model == 'splatfacto-w-big':
+    #     tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap_w(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+    #     tempo_train, gpu_train, ram_train = nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_path, model)
+    #     psnr, ssim, lpips = nerfstudio_evaluations_w(splatfacto_output_path, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w', info_path)
+    #     normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main_w(colmap_output_path, [os.path.join(frames_parent_path, 'colmap/images')])
 
     output = {
         "lap_mean": np.mean(laplacians), 
