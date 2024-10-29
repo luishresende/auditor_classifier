@@ -290,11 +290,13 @@ def nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info
         info["ram_colmap"] = ram
         info["tempo_colmap"] = tempo
         info["colmap_tries"] = number_iterations
+        info["camera_model"] = camera_model
     else:
         gpu = info["gpu_colmap"]
         ram = info["ram_colmap"]
         tempo = info["tempo_colmap"]
         number_iterations = info["colmap_tries"]
+        camera_model = info["camera_model"]
     write_info(info_path, info)
     return tempo, gpu, ram, number_iterations, camera_model
 
@@ -445,19 +447,20 @@ def nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_pat
         start = time()
         if model == 'splatfacto-w':
             cmd = [
-                "ns-train", model, 
+                "ns-train", 'splatfacto-w-light', 
                 "--data", os.path.join(colmap_output_path, "colmap"), 
                 "--max-num-iterations", "100000", 
                 "--viewer.quit-on-train-completion", "True",
                 "--steps-per-save", "10000", 
                 "--save-only-latest-checkpoint", "False",
                 "--output-dir", splatfacto_output_path,
-                "nerf-w-data-parser-config", "--data", os.path.join(colmap_output_path, "colmap"),
+                "colmap", "--data", os.path.join(colmap_output_path, "colmap"),
+                # "nerf-w-data-parser-config", "--data", os.path.join(colmap_output_path, "colmap"),
                 "--data-name", "brandenburg"
             ]
         elif model == 'splatfacto-w-big':
             cmd = [
-                "ns-train", 'splatfacto-w', 
+                "ns-train", 'splatfacto-w-light', 
                 "--data", os.path.join(colmap_output_path, "colmap"), 
                 "--max-num-iterations", "100000", 
                 "--viewer.quit-on-train-completion", "True",
@@ -467,7 +470,8 @@ def nerfstudio_splatfacto_w(colmap_output_path, splatfacto_output_path, info_pat
                 "--pipeline.model.cull_alpha_thresh", "0.005",
                 "--pipeline.model.continue_cull_post_densification", "False",
                 "--pipeline.model.densify-grad-thresh", "0.0006",
-                "nerf-w-data-parser-config", "--data", os.path.join(colmap_output_path, "colmap"),
+                "colmap", "--data", os.path.join(colmap_output_path, "colmap"),
+                # "nerf-w-data-parser-config", "--data", os.path.join(colmap_output_path, "colmap"),
                 "--data-name", "brandenburg"
             ]
         process = subprocess.Popen(cmd)
@@ -809,11 +813,11 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
 
     info_path = init(parent_path, video_folder)
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
-    if model == 'splatfacto' or model == 'splatfacto-big':
+    if model == 'splatfacto' or model == 'splatfacto-big' or model == 'splatfacto-w-light':
         # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
         tempo_colmap, gpu_colmap, ram_colmap, number_iterations_colmap, camera_model = nerfstudio_colmap(frames_parent_path, colmap_output_path, colmap_limit, info_path)
         tempo_train, gpu_train, ram_train = nerfstudio_splatfacto(colmap_output_path, splatfacto_output_path, info_path, model)
-        psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto', info_path)
+        psnr, ssim, lpips = nerfstudio_evaluations(splatfacto_output_path, video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
         normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = colmap_evaluation_main(colmap_output_path, images_path_8)
         # normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
     elif model == 'splatfacto-w' or model == 'splatfacto-w-big':

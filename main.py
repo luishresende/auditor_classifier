@@ -30,10 +30,10 @@ def main(path, model):
             )
         write_info(os.path.join(path, file, "output_metrics_features.json"), output)
 
-path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1_W"
+path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1"
 # cria_pastas(path)
-main(path, 'splatfacto-w')
+main(path, 'splatfacto-w-light')
 
-path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1_W_big"
-# cria_pastas(path)
-main(path, 'splatfacto-w-big')
+# path = "/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_1_W_big"
+# # cria_pastas(path)
+# main(path, 'splatfacto-w-big')
