@@ -628,11 +628,13 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     
     # Models
     for model in models:
-        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model)
+        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model, downscale=1)
     
         # Model evaluations
         psnr, ssim, lpips, fps = nerfstudio_model_evaluations(splatfacto_output_path + f"_{model}", video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
 
+        output[model] = {}
+        
         output[model]["tempo_train"] = tempo_train
         output[model]["gpu_train_max_vram"] = max(gpu_train_vram)
         output[model]["gpu_train_max_perc"] = max(gpu_train_perc)
