@@ -631,7 +631,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
         tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model, downscale=1)
     
         # Model evaluations
-        psnr, ssim, lpips, fps = nerfstudio_model_evaluations(splatfacto_output_path + f"_{model}", video_folder, os.path.join(frames_parent_path, 'evaluations'), 'splatfacto-w-light', info_path)
+        psnr, ssim, lpips, fps = nerfstudio_model_evaluations(splatfacto_output_path + f"_{model}", video_folder, os.path.join(frames_parent_path, 'evaluations'), model, info_path)
 
         output[model] = {}
         
