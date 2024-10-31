@@ -518,11 +518,11 @@ def preprocess_evaluation_main(colmap_output_path, images_path):
 
     return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images, camera_model
 
-def init(parent_path, video_folder):
+def init(parent_path, video_folder, is_images=False):
     if not os.path.exists(os.path.join(parent_path, video_folder, "info.json")):
         info = {
-            "extract": False,
-            "delete_blurred": False,
+            "extract": is_images,
+            "delete_blurred": is_images,
             "laplacians": False,
             "pilot": False,
             "colmap": False,
@@ -565,7 +565,7 @@ def write_info(info_path, info):
         file.write(json_object)
         file.close()
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models):
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, is_images=False):
     # repetition_number = 10
     frames_number = 300
     colmap_limit = 3
