@@ -51,12 +51,7 @@ parser.add_argument("-i", "--initialize", type=bool, help="To initialize the vid
 args = parser.parse_args()
 
 models = [
-    'nerfacto',
-    'nerfacto-big',
-    'splatfacto',
-    'splatfacto-big',
-    'splatfacto-w',
-    'splatfacto-w-light'
+    'nerfacto'
 ]
 
 if args.initialize:

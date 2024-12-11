@@ -61,12 +61,25 @@ def extrai_frames_ffmpeg(parent_path, video_folder, video_path):
         if len(os.listdir(os.path.join(parent_path, video_folder, 'images_orig'))) == 0:
             os.system('ffmpeg -i ' + os.path.join(parent_path, video_folder, video_path) + ' ' + os.path.join(parent_path, video_folder, 'images_orig') + r'/frame%5d.png')
 
+
+def get_image_resolution(parent_path, video_folder):
+    images_orig_path = os.path.join(parent_path, video_folder, 'images_orig')
+    first_image = os.listdir(str(images_orig_path))[0]
+    image = cv2.imread(first_image)
+    # Obter largura e altura
+    height, width, _ = image.shape
+
+    return [width, height]
+
 def extrai_frames(parent_path, video_folder, video_path, frames_number, info_path):
     info = read_info(info_path)
+
     if not info["extract"]:
         extrai_frames_ffmpeg(parent_path, video_folder, video_path)
         laplacians = compute_laplacian(preprocess_images(os.path.join(parent_path, video_folder, 'images_orig')))
         info["extract"] = True
+        if not info['orginal_resolution']:
+            info['original_resolution'] = get_image_resolution(parent_path, video_folder)
     if not info["delete_blurred"]:
         apaga_frames_com_mais_blur(os.path.join(parent_path, video_folder, 'images_orig'), frames_number, laplacians)
         info["delete_blurred"] = True
@@ -82,6 +95,18 @@ def extrai_frames(parent_path, video_folder, video_path, frames_number, info_pat
         laplacians = info["lap_val"]
     write_info(info_path, info)
     return laplacians
+
+
+def get_downscale_factor(original_resolution, tartge_resolution):
+    original_width, original_height = original_resolution
+    tartge_width, tartge_height = tartge_resolution
+    factor = 0
+    while original_width > tartge_width:
+        original_width /= 2
+        factor += 1
+
+    return factor
+
 
 def delete_colmap_partial_data(colmap_output_path):
     os.system("rm -rf " + os.path.join(colmap_output_path, "images"))
@@ -257,7 +282,7 @@ def run_command(cmd):
             ram.append(ram_usage)
     return gpu_vram, gpu_perc, ram
 
-def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path):
+def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path, downscale):
     info = read_info(info_path)
     if not info["colmap"]:
         number_iterations = 0
@@ -271,6 +296,7 @@ def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_p
                 "--output-dir", colmap_output_path, 
                 "--matching-method", "exhaustive",
                 "--no-refine-intrinsics"
+                "--num-downscales", int(downscale)
             ]
             gpu_vram, gpu_perc, ram = run_command(cmd)
             is_wrong_flag = is_wrong(colmap_output_path, os.path.join(frames_parent_path, "images_orig"))
@@ -300,44 +326,18 @@ def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_p
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram, number_iterations, camera_model
 
-def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model, downscale=1):
+def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model):
     info = read_info(info_path)
     if not info[model]["trained"]:
         start = time()
-        if model == "splatfacto-w":
-            cmd = [
-                "ns-train", "splatfacto-w-light", 
-                "--data", colmap_output_path, 
-                "--max-num-iterations", "100000", 
-                "--viewer.quit-on-train-completion", "True",
-                "--steps-per-save", "10000", 
-                "--save-only-latest-checkpoint", "False",
-                "--output-dir", splatfacto_output_path,
-                "--pipeline.model.enable-bg-model", "True",
-                "--pipeline.model.bg-num-layers", "3",
-                "--pipeline.model.appearance-embed-dim", "48",
-                "--pipeline.model.app-num-layers", "3",
-                "--pipeline.model.app-layer-width", "256",
-                "--pipeline.model.enable-alpha-loss", "True",
-                "--pipeline.model.appearance-features-dim", "72",
-                "--pipeline.model.enable-robust-mask", "True",
-                "--pipeline.model.never-mask-upper", "0.4",
-                "--pipeline.model.sh-degree-interval", "2000",
-                "--pipeline.model.use-avg-appearance", "False",
-                "--pipeline.model.eval-right-half", "True",
-                "nerfstudio-data", "--downscale-factor", str(downscale)
-            ]
-        else:
-            cmd = [
-                "ns-train", model, 
-                "--data", colmap_output_path, 
-                "--max-num-iterations", "100000", 
-                "--viewer.quit-on-train-completion", "True",
-                "--steps-per-save", "10000", 
-                "--save-only-latest-checkpoint", "False",
-                "--output-dir", splatfacto_output_path,
-                "nerfstudio-data", "--downscale-factor", str(downscale)
-            ]
+        cmd = [
+            "ns-train", model,
+            "--data", colmap_output_path,
+            "--max-num-iterations", "50000",
+            "--viewer.quit-on-train-completion", "True",
+            "--pipeline.model.predict-normals", "True",
+            "--output-dir", splatfacto_output_path
+        ]
         gpu_vram, gpu_perc, ram = run_command(cmd)
         end = time()
         sleep(1.0)
@@ -354,6 +354,46 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
         tempo = info[model][f"tempo_train"]
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram
+
+
+def search_config(base_dir):
+    for root, dirs, files in os.walk(base_dir):
+        if 'config.yml' in files:
+            config_path = os.path.join(root, 'config.yml')
+            return config_path
+    return None  # Retorna None se o arquivo não for encontrado
+
+
+def nerfstudio_export(model, nerf_output_path, info_path):
+    info = read_info(info_path)
+    output_dir = os.path.join(nerf_output_path, 'export')
+    os.makedirs(output_dir, exist_ok=True)
+    if not info[model]["exported"]:
+        start = time()
+        cmd = [
+            "ns-export", model,
+            "--load-config", search_config(nerf_output_path),
+            "--max-num-iterations", "50000",
+            "--output-dir", output_dir,
+            "--remove-outliers", "False"
+        ]
+        gpu_vram, gpu_perc, ram = run_command(cmd)
+        end = time()
+        sleep(1.0)
+        tempo = end - start
+        info[model]["exported"] = True
+        info[model][f"gpu_train_vram"] = gpu_vram
+        info[model][f"gpu_train_perc"] = gpu_perc
+        info[model][f"ram_train"] = ram
+        info[model][f"tempo_train"] = tempo
+    else:
+        gpu_vram = info[model][f"gpu_train_vram"]
+        gpu_perc = info[model][f"gpu_train_perc"]
+        ram = info[model][f"ram_train"]
+        tempo = info[model][f"tempo_train"]
+    write_info(info_path, info)
+    return tempo, gpu_vram, gpu_perc, ram
+
 
 def nerfstudio_model_evaluations(model_output_path, video_folder, destino_path, model, info_path):
     info = read_info(info_path)
@@ -530,25 +570,8 @@ def init(parent_path, video_folder, is_images=False):
                 "trained": False,
                 "evaluations": False
             },
-            "nerfacto-big": {
-                "trained": False,
-                "evaluations": False
-            },
-            "splatfacto": {
-                "trained": False,
-                "evaluations": False
-            },
-            "splatfacto-big": {
-                "trained": False,
-                "evaluations": False
-            },
-            "splatfacto-w": {
-                "trained": False,
-                "evaluations": False
-            },
-            "splatfacto-w-light": {
-                "trained": False,
-                "evaluations": False
+            "poisson": {
+                "exported": False
             }
         }
         write_info(os.path.join(parent_path, video_folder, "info.json"), info)
@@ -565,21 +588,15 @@ def write_info(info_path, info):
         file.write(json_object)
         file.close()
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, is_images=False):
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, export_model="poisson", is_images=False):
     # repetition_number = 10
     frames_number = 300
-    colmap_limit = 3
-    elems = [*range(10000, 100000, 10000)]
-    elems.append(99999)
+    colmap_limit = 1
+    elems = [49999]
+
 
     frames_parent_path = os.path.join(parent_path, video_folder)
     images_path = os.path.join(frames_parent_path, 'images_orig')
-    images_path_8 = [
-        os.path.join(frames_parent_path, 'images_8'), 
-        os.path.join(frames_parent_path, 'images_4'), 
-        os.path.join(frames_parent_path, 'images_2'), 
-        os.path.join(frames_parent_path, 'images')
-    ]
 
     # Init
     info_path = init(parent_path, video_folder)
@@ -587,11 +604,18 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     # Extract frames and get laplacians
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
 
+
+    down_factor = get_downscale_factor((info_path['original_resolution'][0], info_path['original_resolution'][1]), (960, 540))
+    images_path_8 = [
+        os.path.join(frames_parent_path, f'images_{pow(2, i)}') for i in range(down_factor, 0, -1)
+    ]
+    images_path_8.append(os.path.join(frames_parent_path, f'images'))
+
     # Pilot study with repetitions
     # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
 
     # Preprocess dataset
-    tempo_colmap, gpu_colmap_vram, gpu_colmap_perc, ram_colmap, number_iterations_colmap, camera_model = preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path)
+    tempo_colmap, gpu_colmap_vram, gpu_colmap_perc, ram_colmap, number_iterations_colmap, camera_model = preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path, down_factor)
     
     # Colmap evaluations
     normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = preprocess_evaluation_main(colmap_output_path, images_path_8)
@@ -628,17 +652,23 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     
     # Models
     for model in models:
-        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model, downscale=1)
-    
+        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model)
+        tempo_export, gpu_export_vram, gpu_export_perc, ram_export = nerfstudio_export(export_model, splatfacto_output_path + f"_{model}", info_path)
+
         # Model evaluations
         psnr, ssim, lpips, fps = nerfstudio_model_evaluations(splatfacto_output_path + f"_{model}", video_folder, os.path.join(frames_parent_path, 'evaluations'), model, info_path)
 
         output[model] = {}
-        
+
         output[model]["tempo_train"] = tempo_train
         output[model]["gpu_train_max_vram"] = max(gpu_train_vram)
         output[model]["gpu_train_max_perc"] = max(gpu_train_perc)
         output[model]["ram_train_max"] = max(ram_train)
+
+        output[export_model]["tempo_export"] = tempo_export
+        output[export_model]["gpu_export_max_vram"] = max(gpu_export_vram)
+        output[export_model]["gpu_export_max_perc"] = max(gpu_export_perc)
+        output[export_model]["ram_export_max"] = max(ram_export)
 
         output[model]["psnr_train_max"] = max(psnr)
         output[model]["ssim_train_max"] = max(ssim)
