@@ -318,7 +318,7 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
         cmd = [
             "ns-train", model,
             "--data", colmap_output_path,
-            "--max-num-iterations", "50000",
+            "--max-num-iterations", "49999",
             "--viewer.quit-on-train-completion", "True",
             "--pipeline.model.predict-normals", "True",
             "--output-dir", splatfacto_output_path
@@ -383,8 +383,7 @@ def nerfstudio_export(model, nerf_output_path, info_path):
 def nerfstudio_model_evaluations(model_output_path, video_folder, destino_path, model, info_path):
     info = read_info(info_path)
     if not info[model]["evaluations"]:
-        elems = [*range(10000, 100000, 10000)]
-        elems.append(99999)
+        elems = [49999]
         psnr = []
         ssim = []
         lpips = []
@@ -650,6 +649,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
         output[model]["gpu_train_max_perc"] = max(gpu_train_perc)
         output[model]["ram_train_max"] = max(ram_train)
 
+        output[export_model] = {}
         output[export_model]["tempo_export"] = tempo_export
         output[export_model]["gpu_export_max_vram"] = max(gpu_export_vram)
         output[export_model]["gpu_export_max_perc"] = max(gpu_export_perc)
