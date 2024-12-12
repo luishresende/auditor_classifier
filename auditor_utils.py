@@ -53,23 +53,20 @@ def preprocess_images(frames_path):
     images_paths = [os.path.join(frames_path, image_path) for image_path in images_paths]
     return images_paths
 
-def extrai_frames_ffmpeg(parent_path, video_folder, video_path):
-    if not os.path.exists(os.path.join(parent_path, video_folder, 'images_orig')):
-        os.system('mkdir ' + os.path.join(parent_path, video_folder, 'images_orig'))
-        os.system('ffmpeg -i ' + os.path.join(parent_path, video_folder, video_path) + ' ' + os.path.join(parent_path, video_folder, 'images_orig') + r'/frame%5d.png')
-    else:
-        if len(os.listdir(os.path.join(parent_path, video_folder, 'images_orig'))) == 0:
-            os.system('ffmpeg -i ' + os.path.join(parent_path, video_folder, video_path) + ' ' + os.path.join(parent_path, video_folder, 'images_orig') + r'/frame%5d.png')
+import os
 
+def extrai_frames_ffmpeg(parent_path, video_folder, video_path, target_resolution=(1280, 720)):
+    output_folder = os.path.join(parent_path, video_folder, 'images_orig')
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-def get_image_resolution(parent_path, video_folder):
-    images_orig_path = os.path.join(parent_path, video_folder, 'images_orig')
-    first_image = os.listdir(str(images_orig_path))[0]
-    image = cv2.imread(first_image)
-    # Obter largura e altura
-    height, width, _ = image.shape
+    ffmpeg_command = f'ffmpeg -i "{os.path.join(parent_path, video_folder, video_path)}" ' \
+                     f'-vf "scale={target_resolution[0]}:{target_resolution[1]}" ' \
+                     f'"{os.path.join(output_folder, "frame%05d.png")}"'
 
-    return [width, height]
+    if len(os.listdir(output_folder)) == 0:
+        os.system(ffmpeg_command)
+
 
 def extrai_frames(parent_path, video_folder, video_path, frames_number, info_path):
     info = read_info(info_path)
@@ -78,8 +75,6 @@ def extrai_frames(parent_path, video_folder, video_path, frames_number, info_pat
         extrai_frames_ffmpeg(parent_path, video_folder, video_path)
         laplacians = compute_laplacian(preprocess_images(os.path.join(parent_path, video_folder, 'images_orig')))
         info["extract"] = True
-        if not info['orginal_resolution']:
-            info['original_resolution'] = get_image_resolution(parent_path, video_folder)
     if not info["delete_blurred"]:
         apaga_frames_com_mais_blur(os.path.join(parent_path, video_folder, 'images_orig'), frames_number, laplacians)
         info["delete_blurred"] = True
@@ -95,17 +90,6 @@ def extrai_frames(parent_path, video_folder, video_path, frames_number, info_pat
         laplacians = info["lap_val"]
     write_info(info_path, info)
     return laplacians
-
-
-def get_downscale_factor(original_resolution, tartge_resolution):
-    original_width, original_height = original_resolution
-    tartge_width, tartge_height = tartge_resolution
-    factor = 0
-    while original_width > tartge_width:
-        original_width /= 2
-        factor += 1
-
-    return factor
 
 
 def delete_colmap_partial_data(colmap_output_path):
@@ -259,6 +243,7 @@ def run_command(cmd):
     gpu_vram = []
     gpu_perc = []
     ram = []
+
     process = subprocess.Popen(cmd)
     # Monitor GPU usage while the command is running
     try:
@@ -295,8 +280,8 @@ def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_p
                 "--data", os.path.join(frames_parent_path, "images_orig"), 
                 "--output-dir", colmap_output_path, 
                 "--matching-method", "exhaustive",
-                "--no-refine-intrinsics"
-                "--num-downscales", int(downscale)
+                "--no-refine-intrinsics",
+                "--num-downscales", f'{downscale}'
             ]
             gpu_vram, gpu_perc, ram = run_command(cmd)
             is_wrong_flag = is_wrong(colmap_output_path, os.path.join(frames_parent_path, "images_orig"))
@@ -366,14 +351,14 @@ def search_config(base_dir):
 
 def nerfstudio_export(model, nerf_output_path, info_path):
     info = read_info(info_path)
-    output_dir = os.path.join(nerf_output_path, 'export')
+    output_dir = os.path.join(str(nerf_output_path), str(model))
     os.makedirs(output_dir, exist_ok=True)
+    print(info[model])
     if not info[model]["exported"]:
         start = time()
         cmd = [
             "ns-export", model,
             "--load-config", search_config(nerf_output_path),
-            "--max-num-iterations", "50000",
             "--output-dir", output_dir,
             "--remove-outliers", "False"
         ]
@@ -382,15 +367,15 @@ def nerfstudio_export(model, nerf_output_path, info_path):
         sleep(1.0)
         tempo = end - start
         info[model]["exported"] = True
-        info[model][f"gpu_train_vram"] = gpu_vram
-        info[model][f"gpu_train_perc"] = gpu_perc
-        info[model][f"ram_train"] = ram
-        info[model][f"tempo_train"] = tempo
+        info[model][f"gpu_export_vram"] = gpu_vram
+        info[model][f"gpu_export_perc"] = gpu_perc
+        info[model][f"ram_export"] = ram
+        info[model][f"tempo_export"] = tempo
     else:
-        gpu_vram = info[model][f"gpu_train_vram"]
-        gpu_perc = info[model][f"gpu_train_perc"]
-        ram = info[model][f"ram_train"]
-        tempo = info[model][f"tempo_train"]
+        gpu_vram = info[model][f"gpu_export_vram"]
+        gpu_perc = info[model][f"gpu_export_perc"]
+        ram = info[model][f"ram_export"]
+        tempo = info[model][f"tempo_export"]
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram
 
@@ -588,7 +573,8 @@ def write_info(info_path, info):
         file.write(json_object)
         file.close()
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, export_model="poisson", is_images=False):
+
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, is_images=False, export_model="poisson"):
     # repetition_number = 10
     frames_number = 300
     colmap_limit = 1
@@ -605,51 +591,50 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
 
 
-    down_factor = get_downscale_factor((info_path['original_resolution'][0], info_path['original_resolution'][1]), (960, 540))
     images_path_8 = [
-        os.path.join(frames_parent_path, f'images_{pow(2, i)}') for i in range(down_factor, 0, -1)
+        os.path.join(frames_parent_path, f'images')
     ]
-    images_path_8.append(os.path.join(frames_parent_path, f'images'))
 
     # Pilot study with repetitions
     # pilot_study(repetition_number, frames_parent_path, pilot_output_path, info_path)
 
+
     # Preprocess dataset
-    tempo_colmap, gpu_colmap_vram, gpu_colmap_perc, ram_colmap, number_iterations_colmap, camera_model = preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path, down_factor)
-    
+    tempo_colmap, gpu_colmap_vram, gpu_colmap_perc, ram_colmap, number_iterations_colmap, camera_model = preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_path, downscale=0)
+
     # Colmap evaluations
     normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, percentage_poses_found, _ = preprocess_evaluation_main(colmap_output_path, images_path_8)
-    
+
     # Colmap pilot study evaluations
     # normals_inside_pilot, normals_inside_center_pilot, percentage_angle_views_pilot, percentage_angle_views_center_pilot, percentage_poses_found_pilot, camera_models_pilot = colmap_evaluation_pilot(os.path.join(frames_parent_path, pilot_output_path), images_path_8)
 
     output = {
-            "lap_mean": np.mean(laplacians), 
-            "lap_max": max(laplacians), 
-            "lap_min": min(laplacians), 
+            "lap_mean": np.mean(laplacians),
+            "lap_max": max(laplacians),
+            "lap_min": min(laplacians),
             "lap_median": np.median(laplacians),
-            
-            "tempo_colmap": tempo_colmap, 
-            "gpu_colmap_max_vram": max(gpu_colmap_vram), 
-            "gpu_colmap_max_perc": max(gpu_colmap_perc), 
-            "ram_colmap_max": max(ram_colmap), 
+
+            "tempo_colmap": tempo_colmap,
+            "gpu_colmap_max_vram": max(gpu_colmap_vram),
+            "gpu_colmap_max_perc": max(gpu_colmap_perc),
+            "ram_colmap_max": max(ram_colmap),
             "number_iterations_colmap": number_iterations_colmap,
 
-            "percentage_normals_inside": normals_inside, 
-            "percentage_normals_inside_center": normals_inside_center, 
-            "percentage_angle_views": percentage_angle_views, 
-            "percentage_angle_views_center": percentage_angle_views_center, 
+            "percentage_normals_inside": normals_inside,
+            "percentage_normals_inside_center": normals_inside_center,
+            "percentage_angle_views": percentage_angle_views,
+            "percentage_angle_views_center": percentage_angle_views_center,
             "percentage_poses_found": percentage_poses_found,
             "camera_model": camera_model,
 
             # "percentage_normals_inside_pilot": normals_inside_pilot,
-            # "percentage_normals_inside_center_pilot": normals_inside_center_pilot, 
-            # "percentage_angle_views_pilot": percentage_angle_views_pilot, 
-            # "percentage_angle_views_center_pilot": percentage_angle_views_center_pilot, 
+            # "percentage_normals_inside_center_pilot": normals_inside_center_pilot,
+            # "percentage_angle_views_pilot": percentage_angle_views_pilot,
+            # "percentage_angle_views_center_pilot": percentage_angle_views_center_pilot,
             # "percentage_poses_found_pilot": percentage_poses_found_pilot,
             # "camera_models_pilot": camera_models_pilot,
         }
-    
+
     # Models
     for model in models:
         tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model)
