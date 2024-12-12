@@ -16,28 +16,16 @@ def cria_pastas(path, is_images=False):
 
 def main(path, models, is_images=False):
     for file in os.listdir(path):
-        try:
-            output = pipeline(
-                path,
-                file,
-                file + ".mp4",
-                "pilot",
-                os.path.join(path, file),
-                os.path.join(path, file, "output"),
-                models,
-                is_images
-            )
-        except:
-            output = pipeline(
-                path,
-                file,
-                file + ".MOV",
-                "pilot",
-                os.path.join(path, file),
-                os.path.join(path, file, "output"),
-                models,
-                is_images
-            )
+        output = pipeline(
+            path,
+            file,
+            file + ".mp4" if file.endswith(".mp4") else file + ".MOV",
+            "pilot",
+            os.path.join(path, file),
+            os.path.join(path, file, "output"),
+            models,
+            is_images)
+
         write_info(os.path.join(path, file, "output_metrics_features.json"), output)
 
 parser = argparse.ArgumentParser(description="Script with argparse options")
@@ -51,12 +39,7 @@ parser.add_argument("-i", "--initialize", type=bool, help="To initialize the vid
 args = parser.parse_args()
 
 models = [
-    'nerfacto',
-    'nerfacto-big',
-    'splatfacto',
-    'splatfacto-big',
-    'splatfacto-w',
-    'splatfacto-w-light'
+    'nerfacto'
 ]
 
 if args.initialize:
