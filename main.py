@@ -14,12 +14,27 @@ def cria_pastas(path, is_images=False):
                 os.system(f"mkdir {os.path.join(path, files)}")
                 os.system(f"mv {os.path.join(path, 'images_orig')} {os.path.join(path, files, 'images_orig')}")
 
+
+def get_video_type(path, dir_file):
+    allowed_video_types = ['.mp4', '.MOV', '.mov']
+    files = os.listdir(str(os.path.join(path, dir_file)))
+    for file in files:
+        for video_type in allowed_video_types:
+            if file.endswith(video_type):
+                return video_type
+    return None
+
 def main(path, models, is_images=False):
     for file in os.listdir(path):
+        file_type = get_video_type(path, file)
+        if file_type is None:
+            print(f'Video not found in dir {file}')
+            continue
+
         output = pipeline(
             path,
             file,
-            file + ".mp4" if file.endswith(".mp4") else file + ".MOV",
+            file + file_type,
             "pilot",
             os.path.join(path, file),
             os.path.join(path, file, "output"),
