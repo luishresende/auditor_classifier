@@ -353,14 +353,16 @@ def nerfstudio_export(model, nerf_output_path, info_path):
     info = read_info(info_path)
     output_dir = os.path.join(str(nerf_output_path), str(model))
     os.makedirs(output_dir, exist_ok=True)
-    print(info[model])
+
     if not info[model]["exported"]:
         start = time()
         cmd = [
             "ns-export", model,
             "--load-config", search_config(nerf_output_path),
             "--output-dir", output_dir,
-            "--remove-outliers", "False"
+            "--obb-center", "0", "0", "0",
+            "--obb-rotation", "0", "0", "0",
+            "--obb-scale", "2", "2", "2"
         ]
         gpu_vram, gpu_perc, ram = run_command(cmd)
         end = time()
