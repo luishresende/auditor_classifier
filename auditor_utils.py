@@ -349,12 +349,12 @@ def search_config(base_dir):
     return None  # Retorna None se o arquivo não for encontrado
 
 
-def nerfstudio_export(model, nerf_output_path, info_path):
+def nerfstudio_export(model, nerf_output_path, info_path, force_export=False):
     info = read_info(info_path)
     output_dir = os.path.join(str(nerf_output_path), str(model))
     os.makedirs(output_dir, exist_ok=True)
 
-    if not info[model]["exported"]:
+    if not info[model]["exported"] or force_export:
         start = time()
         cmd = [
             "ns-export", model,
