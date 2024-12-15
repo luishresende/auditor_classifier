@@ -33,17 +33,15 @@ def compute_laplacian(images_paths):
     laplacians = np.array(laplacians)
     return laplacians
 
+def select_windows(frames_number, total_number_frames):
+    space = np.linspace(0, total_number_frames, frames_number+1, dtype=int)
+    return space[0:frames_number], space[1:]
+
 def apaga_frames_com_mais_blur(frames_path, frames_number, laplacians):
-    divide = len(laplacians) // frames_number
-    for i in range(len(laplacians) // divide):
-        idx = laplacians[i * divide:(i + 1) * divide].argmax() + i * divide
-        for j in range(i * divide, (i + 1) * divide):
-            if j != idx:
-                os.system('rm ' + frames_path + '/frame{:05d}.png'.format(j+1))
-        print_progress_bar(i, len(laplacians) // divide)
-    if divide * (len(laplacians) // divide) < len(laplacians):
-        idx = laplacians[(len(laplacians) // divide) * divide:].argmax() + (i+1) * divide
-        for j in range((len(laplacians) // divide) * divide,len(laplacians)):
+    begs, ends = select_windows(frames_number, len(laplacians))
+    for beg, end in zip(begs, ends):
+        idx = laplacians[beg:end].argmax() + beg
+        for j in range(beg, end):
             if j != idx:
                 os.system('rm ' + frames_path + '/frame{:05d}.png'.format(j+1))
 
@@ -52,8 +50,6 @@ def preprocess_images(frames_path):
     images_paths = sorted(images_paths)
     images_paths = [os.path.join(frames_path, image_path) for image_path in images_paths]
     return images_paths
-
-import os
 
 def extrai_frames_ffmpeg(parent_path, video_folder, video_path, target_resolution=(1280, 720)):
     output_folder = os.path.join(parent_path, video_folder, 'images_orig')
