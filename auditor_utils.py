@@ -318,7 +318,7 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
         cmd = [
             "ns-train", model,
             "--data", colmap_output_path,
-            "--max-num-iterations", "49999",
+            "--max-num-iterations", "50000",
             "--viewer.quit-on-train-completion", "True",
             "--pipeline.model.predict-normals", "True",
             "--output-dir", splatfacto_output_path
