@@ -33,17 +33,15 @@ def compute_laplacian(images_paths):
     laplacians = np.array(laplacians)
     return laplacians
 
+def select_windows(frames_number, total_number_frames):
+    space = np.linspace(0, total_number_frames, frames_number+1, dtype=int)
+    return space[0:frames_number], space[1:]
+
 def apaga_frames_com_mais_blur(frames_path, frames_number, laplacians):
-    divide = len(laplacians) // frames_number
-    for i in range(len(laplacians) // divide):
-        idx = laplacians[i * divide:(i + 1) * divide].argmax() + i * divide
-        for j in range(i * divide, (i + 1) * divide):
-            if j != idx:
-                os.system('rm ' + frames_path + '/frame{:05d}.png'.format(j+1))
-        print_progress_bar(i, len(laplacians) // divide)
-    if divide * (len(laplacians) // divide) < len(laplacians):
-        idx = laplacians[(len(laplacians) // divide) * divide:].argmax() + (i+1) * divide
-        for j in range((len(laplacians) // divide) * divide,len(laplacians)):
+    begs, ends = select_windows(frames_number, len(laplacians))
+    for beg, end in zip(begs, ends):
+        idx = laplacians[beg:end].argmax() + beg
+        for j in range(beg, end):
             if j != idx:
                 os.system('rm ' + frames_path + '/frame{:05d}.png'.format(j+1))
 
@@ -52,8 +50,6 @@ def preprocess_images(frames_path):
     images_paths = sorted(images_paths)
     images_paths = [os.path.join(frames_path, image_path) for image_path in images_paths]
     return images_paths
-
-import os
 
 def extrai_frames_ffmpeg(parent_path, video_folder, video_path, target_resolution=(1280, 720)):
     output_folder = os.path.join(parent_path, video_folder, 'images_orig')
@@ -311,7 +307,7 @@ def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_p
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram, number_iterations, camera_model
 
-def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model):
+def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model, downscale=None, split_fraction=0.9):
     info = read_info(info_path)
     if not info[model]["trained"]:
         start = time()
@@ -321,7 +317,9 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
             "--max-num-iterations", "49999",
             "--viewer.quit-on-train-completion", "True",
             "--pipeline.model.predict-normals", "True",
-            "--output-dir", splatfacto_output_path
+            "--output-dir", splatfacto_output_path,
+            "nerfstudio-data", "--downscale-factor", str(downscale),
+            "--train-split-fraction", str(split_fraction)
         ]
         gpu_vram, gpu_perc, ram = run_command(cmd)
         end = time()
@@ -575,9 +573,9 @@ def write_info(info_path, info):
         file.close()
 
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, is_images=False, export_model="poisson"):
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, downscale_factor, frames_number, is_images=False, export_model="poisson", split_fraction=0.9):
     # repetition_number = 10
-    frames_number = 300
+    # frames_number = 300
     colmap_limit = 1
     elems = [49999]
 
@@ -586,7 +584,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     images_path = os.path.join(frames_parent_path, 'images_orig')
 
     # Init
-    info_path = init(parent_path, video_folder)
+    info_path = init(parent_path, video_folder, is_images)
 
     # Extract frames and get laplacians
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
@@ -638,7 +636,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
 
     # Models
     for model in models:
-        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model)
+        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model, downscale=downscale_factor, split_fraction=split_fraction)
         tempo_export, gpu_export_vram, gpu_export_perc, ram_export = nerfstudio_export(export_model, splatfacto_output_path + f"_{model}", info_path)
 
         # Model evaluations
