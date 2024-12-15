@@ -307,7 +307,7 @@ def preprocess_data(frames_parent_path, colmap_output_path, colmap_limit, info_p
     write_info(info_path, info)
     return tempo, gpu_vram, gpu_perc, ram, number_iterations, camera_model
 
-def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model):
+def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, model, downscale=None, split_fraction=0.9):
     info = read_info(info_path)
     if not info[model]["trained"]:
         start = time()
@@ -317,7 +317,9 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
             "--max-num-iterations", "49999",
             "--viewer.quit-on-train-completion", "True",
             "--pipeline.model.predict-normals", "True",
-            "--output-dir", splatfacto_output_path
+            "--output-dir", splatfacto_output_path,
+            "nerfstudio-data", "--downscale-factor", str(downscale),
+            "--train-split-fraction", str(split_fraction)
         ]
         gpu_vram, gpu_perc, ram = run_command(cmd)
         end = time()
@@ -571,9 +573,9 @@ def write_info(info_path, info):
         file.close()
 
 
-def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, is_images=False, export_model="poisson"):
+def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_output_path, splatfacto_output_path, models, downscale_factor, frames_number, is_images=False, export_model="poisson", split_fraction=0.9):
     # repetition_number = 10
-    frames_number = 300
+    # frames_number = 300
     colmap_limit = 1
     elems = [49999]
 
@@ -582,7 +584,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
     images_path = os.path.join(frames_parent_path, 'images_orig')
 
     # Init
-    info_path = init(parent_path, video_folder)
+    info_path = init(parent_path, video_folder, is_images)
 
     # Extract frames and get laplacians
     laplacians = extrai_frames(parent_path, video_folder, video_path, frames_number, info_path)
@@ -634,7 +636,7 @@ def pipeline(parent_path, video_folder, video_path, pilot_output_path, colmap_ou
 
     # Models
     for model in models:
-        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model)
+        tempo_train, gpu_train_vram, gpu_train_perc, ram_train = nerfstudio_model(colmap_output_path, splatfacto_output_path + f"_{model}", info_path, model, downscale=downscale_factor, split_fraction=split_fraction)
         tempo_export, gpu_export_vram, gpu_export_perc, ram_export = nerfstudio_export(export_model, splatfacto_output_path + f"_{model}", info_path)
 
         # Model evaluations

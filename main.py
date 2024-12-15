@@ -24,7 +24,7 @@ def get_video_type(path, dir_file):
                 return video_type
     return None
 
-def main(path, models, is_images=False):
+def main(path, models, downscale_factor, frames_number, is_images=False, split_fraction=0.9):
     for file in os.listdir(path):
         file_type = get_video_type(path, file)
         if file_type is None:
@@ -39,7 +39,10 @@ def main(path, models, is_images=False):
             os.path.join(path, file),
             os.path.join(path, file, "output"),
             models,
-            is_images)
+            downscale_factor,
+            frames_number,
+            is_images,
+            split_fraction=split_fraction)
 
         write_info(os.path.join(path, file, "output_metrics_features.json"), output)
 
@@ -49,6 +52,9 @@ parser = argparse.ArgumentParser(description="Script with argparse options")
 parser.add_argument("-vd", "--videos_dir", type=str, help="Folder with videos. Do not use ./ to refer to the folder. Use the absolute path.", default=None)
 parser.add_argument("-id", "--images_dir", type=str, help="Folder with images folders. Do not use ./ to refer to the folder. Use the absolute path.", default=None)
 parser.add_argument("-i", "--initialize", type=bool, help="To initialize the videos folder.", default=False)
+parser.add_argument("-df", "--downscale_factor", type=int, help="Number of downscale to be used", default=None)
+parser.add_argument("-fn", "--frames_number", type=int, help="Number of downscale to be used", default=300)
+parser.add_argument("-sf", "--split_fraction", type=float, help="Fraction to divide train/eval dataset", default=0.9)
 
 # Parse arguments
 args = parser.parse_args()
@@ -60,9 +66,11 @@ models = [
 if args.initialize:
     if args.videos_dir:
         cria_pastas(args.videos_dir)
+    elif args.images_dir:
+        cria_pastas(args.images_dir, is_images=True)
 else:
     if args.images_dir:
-        main(args.images_dir, models, is_images=True)
+        main(args.images_dir, models, args.downscale_factor, None, is_images=True, split_fraction=args.split_fraction)
     elif args.videos_dir:
-        main(args.videos_dir, models)
+        main(args.videos_dir, models, args.downscale_factor, args.frames_number, split_fraction=args.split_fraction)
 # main("/media/tafnes/0E94B37D94B365BD/Users/tafne/Documents/Dataset_Lamia_4", models)
