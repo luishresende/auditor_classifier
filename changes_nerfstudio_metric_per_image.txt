@@ -1,0 +1,16 @@
+Changes in nerfstudio's code:
+- file: "<your path>/nerfstudio/nerfstudio/scripts/eval.py" :
+	-->  metrics_dict, metrics_dict_list = pipeline.get_average_eval_image_metrics(output_path=self.render_output_path, get_std=True)
+	--> benchmark_info = {
+		    "experiment_name": config.experiment_name,
+		    "method_name": config.method_name,
+		    "checkpoint": str(checkpoint_path),
+		    "results": metrics_dict,
+		    "results_list": metrics_dict_list,
+		}
+
+- file: "<your path>/nerfstudio/nerfstudio/engine/trainer.py"
+	--> metrics_dict, _ = self.pipeline.get_average_eval_image_metrics(step=step)
+
+- file: "<your path>/nerfstudio/nerfstudio/pipelines/base_pipeline.py"
+	--> return metrics_dict, metrics_dict_list
