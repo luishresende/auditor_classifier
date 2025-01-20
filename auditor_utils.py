@@ -418,7 +418,7 @@ def nerfstudio_model_evaluations(model_output_path, video_folder, destino_path, 
     write_info(info_path, info)
     return psnr, ssim, lpips, fps
 
-def get_eval_images(project_path, train_split_fraction, eval_path, ns_model):
+def get_eval_images(project_path, train_split_fraction, eval_path, ns_model, fontsize=15):
     db_path = os.path.join(project_path, 'colmap', 'database.db')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -456,47 +456,53 @@ def get_eval_images(project_path, train_split_fraction, eval_path, ns_model):
         
         PSNR_limit = 25
         fig, ax = plt.subplots(figsize=(12,10))
-        plt.plot(imagesd[i_eval], psnr, 'b', linewidth=0.5)
-        plt.plot(imagesd[i_eval], psnr, '.b', markersize=3)
-        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [PSNR_limit, PSNR_limit], '--k', linewidth=2)
-        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, PSNR_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, PSNR_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        plt.plot(imagesd[i_eval], psnr, 'b', linewidth=2)
+        plt.plot(imagesd[i_eval], psnr, '.b', markersize=8)
+        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [PSNR_limit, PSNR_limit], '--k', linewidth=3)
+        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, PSNR_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, PSNR_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
-        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, PSNR_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, PSNR_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, PSNR_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, PSNR_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
         plt.grid(True)
-        plt.ylabel('PSNR')
-        plt.xlabel('Images')
-        plt.title('Evaluation PSNR')
+        plt.ylabel('PSNR', fontsize=fontsize)
+        plt.xlabel('Images', fontsize=fontsize)
+        plt.title('Evaluation PSNR', fontsize=fontsize)
+        plt.tick_params(axis='x', labelsize=fontsize)  # Change xticks fontsize
+        plt.tick_params(axis='y', labelsize=fontsize)  # Change yticks fontsize
         plt.savefig(os.path.join(project_path, folder_report, 'PSNR_per_image.png'), bbox_inches='tight')
 
         SSIM_limit = 0.9
         fig, ax = plt.subplots(figsize=(12,10))
-        plt.plot(imagesd[i_eval], ssim, 'r', linewidth=0.5)
-        plt.plot(imagesd[i_eval], ssim, '.r', markersize=3)
-        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [SSIM_limit, SSIM_limit], '--k', linewidth=2)
-        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, SSIM_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, SSIM_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        plt.plot(imagesd[i_eval], ssim, 'r', linewidth=2)
+        plt.plot(imagesd[i_eval], ssim, '.r', markersize=8)
+        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [SSIM_limit, SSIM_limit], '--k', linewidth=3)
+        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, SSIM_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, SSIM_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
-        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, SSIM_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, SSIM_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, SSIM_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, SSIM_limit+0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
         plt.grid(True)
-        plt.ylabel('SSIM')
-        plt.xlabel('Images')
-        plt.title('Evaluation SSIM')
+        plt.ylabel('SSIM', fontsize=fontsize)
+        plt.xlabel('Images', fontsize=fontsize)
+        plt.title('Evaluation SSIM', fontsize=fontsize)
+        plt.tick_params(axis='x', labelsize=fontsize)  # Change xticks fontsize
+        plt.tick_params(axis='y', labelsize=fontsize)  # Change yticks fontsize
         plt.savefig(os.path.join(project_path, folder_report, 'SSIM_per_image.png'), bbox_inches='tight')
 
         LPIPS_limit = 0.15
         fig, ax = plt.subplots(figsize=(12,10))
-        plt.plot(imagesd[i_eval], lpips, 'g', linewidth=0.5)
-        plt.plot(imagesd[i_eval], lpips, '.g', markersize=3)
-        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [LPIPS_limit, LPIPS_limit], '--k', linewidth=2)
-        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, LPIPS_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, LPIPS_limit-0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        plt.plot(imagesd[i_eval], lpips, 'g', linewidth=2)
+        plt.plot(imagesd[i_eval], lpips, '.g', markersize=8)
+        plt.plot([imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05], [LPIPS_limit, LPIPS_limit], '--k', linewidth=3)
+        arrow = FancyArrowPatch((imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, LPIPS_limit), (imagesd[i_eval[0]]-imagesd[i_eval[-1]]*0.05, LPIPS_limit-0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
-        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, LPIPS_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, LPIPS_limit-0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black')
+        arrow = FancyArrowPatch((imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, LPIPS_limit), (imagesd[i_eval[-1]]+imagesd[i_eval[-1]]*0.05, LPIPS_limit-0.1*(ax.get_ylim()[1]-ax.get_ylim()[0])), arrowstyle='-|>', mutation_scale=15, color='black', linewidth=2)
         ax.add_patch(arrow)
         plt.grid(True)
-        plt.ylabel('LPIPS')
-        plt.xlabel('Images')
-        plt.title('Evaluation LPIPS')
+        plt.ylabel('LPIPS', fontsize=fontsize)
+        plt.xlabel('Images', fontsize=fontsize)
+        plt.title('Evaluation LPIPS', fontsize=fontsize)
+        plt.tick_params(axis='x', labelsize=fontsize)  # Change xticks fontsize
+        plt.tick_params(axis='y', labelsize=fontsize)  # Change yticks fontsize
         plt.savefig(os.path.join(project_path, folder_report, 'LPIPS_per_image.png'), bbox_inches='tight')
     else:
         with open(os.path.join(project_path, folder_report, 'ALERT.txt'), 'w') as filetext:
