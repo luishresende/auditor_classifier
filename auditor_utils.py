@@ -650,6 +650,8 @@ def preprocess_evaluation_main(colmap_output_path, images_path):
     # Plot number of views
     percentage_angle_views = plot_number_views(thetas, phis, centered=False, plot=False)
     percentage_angle_views_center = plot_number_views(thetas_center, phis_center, centered=True, plot=False)
+    
+    plot_matches_metrics(colmap_output_path)
 
     return normals_inside, normals_inside_center, percentage_angle_views, percentage_angle_views_center, num_reg_images_max / num_images, camera_model
 
