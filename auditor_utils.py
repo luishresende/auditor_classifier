@@ -314,7 +314,7 @@ def nerfstudio_model(colmap_output_path, splatfacto_output_path, info_path, mode
         cmd = [
             "ns-train", model,
             "--data", colmap_output_path,
-            "--max-num-iterations", "49999",
+            "--max-num-iterations", "50000",
             "--viewer.quit-on-train-completion", "True",
             "--pipeline.model.predict-normals", "True",
             "--output-dir", splatfacto_output_path,
@@ -347,12 +347,12 @@ def search_config(base_dir):
     return None  # Retorna None se o arquivo não for encontrado
 
 
-def nerfstudio_export(model, nerf_output_path, info_path):
+def nerfstudio_export(model, nerf_output_path, info_path, force_export=False):
     info = read_info(info_path)
     output_dir = os.path.join(str(nerf_output_path), str(model))
     os.makedirs(output_dir, exist_ok=True)
 
-    if not info[model]["exported"]:
+    if not info[model]["exported"] or force_export:
         start = time()
         cmd = [
             "ns-export", model,
